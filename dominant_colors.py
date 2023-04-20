@@ -1,54 +1,48 @@
-import cv2
 import numpy as np
+from PIL import Image
 from sklearn.cluster import KMeans
 import streamlit as st
 
-# Define a function to get the dominant colors and their percentages
-def get_dominant_colors(image, k=3):
-    # Reshape the image into a 2D array of pixels
-    pixel_values = image.reshape((-1, 3))
+def get_dominant_colors(image, k=5):
+    # Load image and convert to RGB format
+    image = Image.open(image).convert('RGB')
     
-    # Create a KMeans object and fit it to the pixel values
-    kmeans = KMeans(n_clusters=k)
-    kmeans.fit(pixel_values)
+    # Reshape image into 2D array of pixels
+    pixels = np.array(image).reshape(-1, 3)
     
-    # Get the centroids and convert them back to the 8-bit color space
+    # Fit KMeans clustering model to pixel values
+    kmeans = KMeans(n_clusters=k).fit(pixels)
+    
+    # Get centroids and counts for each cluster
     centroids = kmeans.cluster_centers_
-    centroids = np.uint8(centroids)
-    
-    # Get the number of pixels assigned to each centroid
     counts = np.bincount(kmeans.labels_)
     
-    # Compute the percentage of pixels for each dominant color
-    percentages = counts / len(pixel_values) * 100
+    # Compute percentages of pixels for each dominant color
+    percentages = counts / sum(counts) * 100
     
-    # Return the dominant colors and their percentages
     return centroids, percentages
 
-# Define a function to display the dominant colors and their percentages
-def show_dominant_colors(colors, percentages):
-    st.write("**Dominant Colors:**")
-    for color, percentage in zip(colors, percentages):
-        hex_color = '#{:02x}{:02x}{:02x}'.format(color[0], color[1], color[2])
-        st.write(f"<div style='background-color:{hex_color}; width:50px; height:50px; display:inline-block;'></div>", unsafe_allow_html=True)
-        st.write(f"{percentage:.2f}%")
+def show_dominant_colors(centroids, percentages):
+    # Create color boxes with corresponding RGB values
+    color_boxes = [f"<div style='background-color: rgb{tuple(map(int, color))}; width: 50px; height: 50px; display: inline-block;'></div>" for color in centroids]
+    
+    # Combine color boxes and percentages into a single string
+    colors_and_percentages = [f"{color_box} {percent:.1f}%" for color_box, percent in zip(color_boxes, percentages)]
+    colors_and_percentages_str = "<br>".join(colors_and_percentages)
+    
+    # Display color boxes and percentages in Streamlit app
+    st.markdown(colors_and_percentages_str, unsafe_allow_html=True)
 
-# Create a Streamlit app
-st.title("Dominant Colors Finder")
-uploaded_file = st.file_uploader("Choose an image", type=["jpg", "jpeg", "png"])
+# Create Streamlit app
+st.title("Dominant Colors in Image")
 
-# If an image is uploaded
+# Upload image and select number of dominant colors to find
+uploaded_file = st.file_uploader("Choose an image file", type=["jpg", "jpeg", "png"])
+k = st.slider("Number of dominant colors", min_value=1, max_value=10, value=5)
+
+# When an image is uploaded, find the dominant colors and display them in the app
 if uploaded_file is not None:
-    # Load the image using OpenCV
-    image = cv2.imread(uploaded_file.name)
-    
-    # Convert the image from BGR to RGB
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    
-    # Get the dominant colors and their percentages
-    k = st.slider("Number of Colors", min_value=2, max_value=10, value=3, step=1)
-    colors, percentages = get_dominant_colors(image, k=k)
-    
-    # Display the original image and the dominant colors with their percentages
-    st.image(image, caption="Original Image", use_column_width=True)
-    show_dominant_colors(colors, percentages)
+    centroids, percentages = get_dominant_colors(uploaded_file, k)
+    show_dominant_colors(centroids, percentages)
+    st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
+
